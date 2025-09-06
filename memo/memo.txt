@@ -1,0 +1,368 @@
+----
+2025.9.3
+
+		public void Test04()
+		{
+			Test04_a(
+				@"C:\Work\20250902_data\0902_0001.csv", // group, KOUMOKU-name, control-name, options...
+				@"C:\Work\20250902_data\0902_0002.csv"  // table-name, column-name, control-name, options...
+				);
+		}
+
+		private class Row_t
+		{
+			public string[] Row;
+			public string ControlName => this.Row[2];
+			public bool Matched = false;
+		}
+
+		private void Test04_a(string file1, string file2)
+		{
+			string[][] csvRows1 = CsvFileReader.ReadToEnd(file1);
+			string[][] csvRows2 = CsvFileReader.ReadToEnd(file2);
+
+			ToRectRows(csvRows1);
+			ToRectRows(csvRows2);
+
+			Row_t[] rows1 = csvRows1.Select(row => new Row_t() { Row = row }).ToArray();
+			Row_t[] rows2 = csvRows2.Select(row => new Row_t() { Row = row }).ToArray();
+
+			List<string[]> dest = new List<string[]>();
+
+			foreach (var row1 in rows1)
+			{
+				bool matched = false;
+
+				foreach (var row2 in rows2)
+				{
+					if (row1.ControlName == row2.ControlName)
+					{
+						List<string> destRow = new List<string>();
+
+						destRow.Add(matched ? "*" : "");
+						destRow.AddRange(row1.Row);
+						destRow.AddRange(row2.Row);
+
+						dest.Add(destRow.ToArray());
+
+						row2.Matched = true;
+						matched = true;
+					}
+				}
+				if (!matched)
+				{
+					List<string> destRow = new List<string>();
+
+					destRow.Add("");
+					destRow.AddRange(row1.Row);
+
+					dest.Add(destRow.ToArray());
+				}
+			}
+			foreach (var row2 in rows2)
+			{
+				if (!row2.Matched)
+				{
+					List<string> destRow = new List<string>();
+
+					destRow.Add("");
+					destRow.AddRange(Enumerable.Repeat("", rows1[0].Row.Length));
+					destRow.AddRange(row2.Row);
+
+					dest.Add(destRow.ToArray());
+				}
+			}
+			CsvFileWriter.WriteRows(SCommon.NextOutputPath() + ".csv", dest.ToArray());
+
+			Test04_b(
+				dest.ToArray(),
+				1 + rows1[0].Row.Length + 0,
+				1 + rows1[0].Row.Length + 1
+				);
+		}
+
+		private void ToRectRows(string[][] rows)
+		{
+			for (int rowidx = 0; rowidx < rows.Length; rowidx++)
+			{
+				string[] row = rows[rowidx];
+
+				row = row.Select(cell => cell.Trim()).ToArray();
+
+				while (1 <= row.Length && row[row.Length - 1] == "")
+					row = SCommon.GetPart(row, 0, row.Length - 1);
+
+				rows[rowidx] = row;
+			}
+			int colcnt = rows.Max(row => row.Length);
+
+			for (int rowidx = 0; rowidx < rows.Length; rowidx++)
+			{
+				string[] row = rows[rowidx];
+
+				while (row.Length < colcnt)
+					row = row.Concat(new string[] { "" }).ToArray();
+
+				rows[rowidx] = row;
+			}
+		}
+
+		private void Test04_b(string[][] rows, int tableNameIndex, int columnNameIndex)
+		{
+			List<string[]> dest = new List<string[]>();
+
+			foreach (var row in rows)
+			{
+				// ? テーブル対応無し行
+				if (
+					row.Length <= tableNameIndex ||
+					row.Length <= columnNameIndex
+					)
+				{
+					dest.Add(new string[] { "テーブル対応無し" });
+				}
+				else
+				{
+					string tableName = row[tableNameIndex];
+					string columnName = row[columnNameIndex];
+
+					string[] values = GetDAIHYOUValues(tableName, columnName);
+
+					foreach (var value in values)
+					{
+						List<string> destRow = new List<string>();
+
+						destRow.Add(tableName);
+						destRow.Add(columnName);
+						destRow.Add(value);
+
+						dest.Add(destRow.ToArray());
+					}
+				}
+				dest.Add(SCommon.EMPTY_STRINGS);
+			}
+			CsvFileWriter.WriteRows(SCommon.NextOutputPath() + ".csv", dest.ToArray());
+		}
+
+		private string[] GetDAIHYOUValues(string tableName, string columnName)
+		{
+			// TODO
+			// TODO
+			// TODO
+			/*
+SELECT *
+FROM (
+	SELECT *
+	FROM your_table
+	WHERE your_column IS NOT NULL
+	ORDER BY DBMS_RANDOM.VALUE
+)
+WHERE ROWNUM <= 1000;
+			*/
+			return new string[] { "A", "B", "C" };
+		}
+	}
+}
+
+----
+2025.9.2
+
+		private byte[] Base64StringToBytes(string s) => Convert.FromBase64String(s);
+
+		private IEnumerable<int> GetPrimesToN(int n)
+		{
+			var sieve = new bool[n + 1];
+
+			for (int p = 2; p <= n; p++)
+			{
+				if (!sieve[p])
+				{
+					yield return p;
+
+					for (int q = p * 2; q <= n; q += p)
+					{
+						sieve[q] = true;
+					}
+				}
+			}
+		}
+
+----
+2025.9.1
+
+		public void Test01()
+		{
+			string[] files = Directory.GetFiles(@"C:\temp\_Source_", "*", SearchOption.AllDirectories);
+
+			foreach (string file in files)
+			{
+				Console.WriteLine(file);
+
+				byte[] fileData = File.ReadAllBytes(file);
+				bool sjisFlag = IsSJISFile(fileData);
+				string text;
+
+				if (sjisFlag)
+					text = SCommon.ENCODING_SJIS.GetString(fileData);
+				else
+					text = Encoding.UTF8.GetString(fileData);
+
+				text = text.Trim();
+				text = SCommon.LinesToText(SCommon.TextToLines(text));
+
+				File.WriteAllText(file, text, Encoding.UTF8);
+			}
+		}
+
+		private bool IsSJISFile(byte[] fileData)
+		{
+			byte[] ret = SCommon.ENCODING_SJIS.GetBytes(SCommon.ToJString(fileData, true, true, true, true));
+
+			if (SCommon.Comp(ret, fileData, SCommon.Comp) == 0)
+				return true;
+
+			// ? has UTF-8 BOM -> erase UTF-8 BOM
+			if (
+				fileData.Length >= 3 &&
+				fileData[0] == 0xEF &&
+				fileData[1] == 0xBB &&
+				fileData[2] == 0xBF
+				)
+				fileData = SCommon.GetPart(fileData, 3);
+
+			ret = Encoding.UTF8.GetBytes(SCommon.UTF8Conv.ToJString(fileData));
+
+			if (SCommon.Comp(ret, fileData, SCommon.Comp) == 0)
+				return false;
+
+			throw new Exception("not SJIS and UTF-8");
+		}
+
+
+----
+2025.8.29
+
+		public void Test01()
+		{
+			Test01_a(
+				@"C:\temp\0001",
+				@"C:\temp\0002"
+				);
+		}
+
+		private void Test01_a(string rootDir1, string rootDir2)
+		{
+			rootDir1 = SCommon.MakeFullPath(rootDir1);
+			rootDir2 = SCommon.MakeFullPath(rootDir2);
+
+			Console.WriteLine(rootDir1);
+			Console.WriteLine(rootDir2);
+
+			string[] relFiles1 = GetRelFiles(rootDir1);
+			string[] relFiles2 = GetRelFiles(rootDir2);
+
+			string[] bothRelFiles = SCommon.GetMerge(relFiles1, relFiles2, SCommon.CompIgnoreCase)[1].ToArray();
+
+			foreach (string bothRelFile in bothRelFiles)
+			{
+				string file1 = Path.Combine(rootDir1, bothRelFile);
+				string file2 = Path.Combine(rootDir2, bothRelFile);
+
+				if (
+					IsSameFile(file1, file2) ||
+					IsSameSourceFile(file1, file2, Encoding.UTF8) ||
+					IsSameSourceFile(file1, file2, SCommon.ENCODING_SJIS)
+					)
+				{
+					Console.WriteLine("DELETE-FILE: " + bothRelFile);
+
+					SCommon.DeletePath(file1);
+					SCommon.DeletePath(file2);
+				}
+			}
+			RemoveSubDirsIfEmpty(rootDir1);
+			RemoveSubDirsIfEmpty(rootDir2);
+
+			Console.WriteLine("done!");
+		}
+
+		private void RemoveSubDirsIfEmpty(string rootDir)
+		{
+			string[] dirs = Directory.GetDirectories(rootDir)
+				.OrderBy(SCommon.CompIgnoreCase)
+				.ToArray();
+
+			foreach (string dir in dirs)
+			{
+				RemoveSubDirsIfEmpty(dir);
+
+				// ? dir == 空のディレクトリ
+				if (
+					Directory.GetDirectories(dir).Length == 0 &&
+					Directory.GetFiles(dir).Length == 0
+					)
+				{
+					Console.WriteLine("DELETE-DIRECTORY: " + dir);
+
+					SCommon.DeletePath(dir);
+				}
+			}
+		}
+
+		private string[] GetRelFiles(string dir)
+		{
+			return Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
+				.Select(file => SCommon.ChangeRoot(file, dir))
+				.ToArray();
+		}
+
+		private bool IsSameFile(string file1, string file2)
+		{
+			using (FileStream reader1 = new FileStream(file1, FileMode.Open, FileAccess.Read, FileShare.Read))
+			using (FileStream reader2 = new FileStream(file2, FileMode.Open, FileAccess.Read, FileShare.Read))
+			{
+				long fileSize = reader1.Length;
+
+				if (fileSize != reader2.Length)
+					return false;
+
+				for (long index = 0L; index < fileSize; index++)
+				{
+					int b1 = reader1.ReadByte();
+					int b2 = reader2.ReadByte();
+
+					if (b1 != b2)
+						return false;
+				}
+			}
+			return true;
+		}
+
+		private bool IsSameSourceFile(string file1, string file2, Encoding encoding)
+		{
+			const long FILE_SIZE_MAX = 30000000L;
+
+			FileInfo info1 = new FileInfo(file1);
+			FileInfo info2 = new FileInfo(file2);
+
+			// ファイルが大きすぎる場合、判定しない。
+			if (
+				info1.Length > FILE_SIZE_MAX ||
+				info2.Length > FILE_SIZE_MAX
+				)
+				return false;
+
+			string source1 = File.ReadAllText(file1, encoding);
+			string source2 = File.ReadAllText(file2, encoding);
+
+			source1 = ISSF_Normalize(source1);
+			source2 = ISSF_Normalize(source2);
+
+			return source1 == source2;
+		}
+
+		private string ISSF_Normalize(string source)
+		{
+			return source.Replace("\r", "").Trim();
+		}
+
